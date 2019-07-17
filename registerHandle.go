@@ -87,9 +87,9 @@ func (m *Mymiddleware) HandleFunc(w http.ResponseWriter, r *http.Request) {
 	for _, v := range m.handlearr {
 		v(&ct)
 		if ct.next {
+			ct.next = false
 			continue
 		}
-		ct.next = false
 		break
 	}
 }
