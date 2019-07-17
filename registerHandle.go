@@ -89,6 +89,7 @@ func (m *Mymiddleware) HandleFunc(w http.ResponseWriter, r *http.Request) {
 		if ct.next {
 			continue
 		}
+		ct.next = false
 		break
 	}
 }
