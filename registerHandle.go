@@ -3,6 +3,7 @@ package httpframe
 import (
 	"fmt"
 	"net/http"
+	"path"
 	"reflect"
 	"strings"
 )
@@ -27,44 +28,59 @@ type HandlerFunc func(*Context)
 
 // RegisterHandle 注册自动路由
 func RegisterHandle(servermux *http.ServeMux, middleware []HandlerFunc, classes ...interface{}) {
-	fixName := func(name string) string {
-		r := []rune(name)
-		a := map[rune]rune{'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd', 'E': 'e', 'F': 'f', 'G': 'g', 'H': 'h', 'I': 'i', 'J': 'j', 'K': 'k', 'L': 'l', 'M': 'm', 'N': 'n', 'O': 'o', 'P': 'p', 'Q': 'q', 'R': 'r', 'S': 's', 'T': 't', 'U': 'u', 'V': 'v', 'W': 'w', 'X': 'x', 'Y': 'y', 'Z': 'z'}
-		b := map[string]string{"A": "_a", "B": "_b", "C": "_c", "D": "_d", "E": "_e", "F": "_f", "G": "_g", "H": "_h", "I": "_i", "J": "_j", "K": "_k", "L": "_l", "M": "_m", "N": "_n", "O": "_o", "P": "_p", "Q": "_q", "R": "_r", "S": "_s", "T": "_t", "U": "_u", "V": "_v", "W": "_w", "X": "_x", "Y": "_y", "Z": "_z"}
-
-		// 首字母小写
-		if v, ok := a[r[0]]; ok {
-			r[0] = v
-		}
-
-		// 除首字母外，其它大写字母替换成下划线加小写
-		s := string(r)
-		for k, v := range b {
-			s = strings.Replace(s, k, v, -1)
-		}
-		return s
-	}
-
 	for _, c := range classes {
-		name := reflect.TypeOf(c).Elem().Name()
-		if strings.HasPrefix(name, "Controller") {
-			name = name[len("Controller"):]
-		}
-		name = "/" + fixName(name)
-		for i := 0; i < reflect.TypeOf(c).NumMethod(); i++ {
-			method := "/" + fixName(reflect.TypeOf(c).Method(i).Name)
-			path := name + method
+		tp := reflect.TypeOf(c)
+		vl := reflect.ValueOf(c)
+		foreach(servermux, middleware, tp, vl, "")
+	}
+}
 
-			//注册路由
-			servermux.HandleFunc(path, NewMiddleware(append(middleware, func(v reflect.Value) HandlerFunc {
-				return func(c *Context) { v.Call([]reflect.Value{reflect.ValueOf(c)}) }
-			}(reflect.ValueOf(c).Method(i)))).HandleFunc)
+// 遍历属性
+func foreach(servermux *http.ServeMux, middleware []HandlerFunc, tp reflect.Type, vl reflect.Value, headpath string) {
+	if tp.Kind() == reflect.Ptr {
+		tp = tp.Elem()
+		vl = vl.Elem()
+	}
 
-			//打印监听的路由
-			fmt.Printf("监听路由:%s\n", path)
+	headpath = path.Join("/", headpath, fixName(tp.Name()))
 
+	for i := 0; i < tp.NumMethod(); i++ {
+
+		method := path.Join("/", fixName(tp.Method(i).Name))
+		path := headpath + method
+
+		//注册路由
+		servermux.HandleFunc(path, NewMiddleware(append(middleware, func(v reflect.Value) HandlerFunc {
+			return func(c *Context) { v.Call([]reflect.Value{reflect.ValueOf(c)}) }
+		}(vl.Method(i)))).HandleFunc)
+
+		//打印监听的路由
+		fmt.Printf("监听路由:%s\n", path)
+	}
+
+	for i := 0; i < tp.NumField(); i++ {
+		if vl.Field(i).CanInterface() {
+			foreach(servermux, middleware, tp.Field(i).Type, vl.Field(i), headpath)
 		}
 	}
+}
+
+func fixName(name string) string {
+	r := []rune(name)
+	a := map[rune]rune{'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd', 'E': 'e', 'F': 'f', 'G': 'g', 'H': 'h', 'I': 'i', 'J': 'j', 'K': 'k', 'L': 'l', 'M': 'm', 'N': 'n', 'O': 'o', 'P': 'p', 'Q': 'q', 'R': 'r', 'S': 's', 'T': 't', 'U': 'u', 'V': 'v', 'W': 'w', 'X': 'x', 'Y': 'y', 'Z': 'z'}
+	b := map[string]string{"A": "_a", "B": "_b", "C": "_c", "D": "_d", "E": "_e", "F": "_f", "G": "_g", "H": "_h", "I": "_i", "J": "_j", "K": "_k", "L": "_l", "M": "_m", "N": "_n", "O": "_o", "P": "_p", "Q": "_q", "R": "_r", "S": "_s", "T": "_t", "U": "_u", "V": "_v", "W": "_w", "X": "_x", "Y": "_y", "Z": "_z"}
+
+	// 首字母小写
+	if v, ok := a[r[0]]; ok {
+		r[0] = v
+	}
+
+	// 除首字母外，其它大写字母替换成下划线加小写
+	s := string(r)
+	for k, v := range b {
+		s = strings.Replace(s, k, v, -1)
+	}
+	return s
 }
 
 //Mymiddleware 中间件支持
